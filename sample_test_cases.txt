@@ -1,0 +1,86 @@
+Music Playlist Management System - Sample Test Cases
+====================================================
+
+Durations in the inputs below are seconds. Enter menu choice 16 to exit.
+These are manual console scenarios; a test passes when the stated result is
+observed and the application continues without crashing.
+
+Test 1: Empty playlist and input validation
+-------------------------------------------
+Actions:
+  6             Play current song
+  7             Next song
+  8             Previous song
+  4             Display playlist
+  1             Add a song with title "   ", then enter "First Song"
+                artist "Test Artist", duration 60
+  16            Exit
+Expected:
+  Empty-playback and empty-display messages appear. A blank title is rejected.
+  The song is added and displayed as 1:00.
+
+Test 2: Insert at beginning, middle, and end
+--------------------------------------------
+Actions:
+  Add "Bravo", "Artist B", 120
+  Insert at position 1: "Alpha", "Artist A", 90
+  Insert at position 2: "Between", "Artist C", 75
+  Insert at position 4: "Delta", "Artist D", 45
+  Display playlist
+Expected order:
+  Alpha, Bravo, Between, Delta
+Expected count: 4
+
+Test 3: Search and artist filter
+-------------------------------
+With Test 2 data:
+  Search title "bra"
+  Search artist "artist a"
+  Display songs by artist "Artist"
+Expected:
+  Partial, case-insensitive matches are returned with positions.
+  The artist filter returns all four songs.
+
+Test 4: Navigation boundaries and repeat modes
+-----------------------------------------------
+With at least two songs:
+  8             At the first song, previous does not move when repeat is off
+  7             Moves to the next song
+  9, last pos    Plays the last song
+  7             At the last song, next does not move when repeat is off
+  13, 2          Enable repeat-all
+  7              Wraps from last to first
+  8              Wraps from first to last
+  13, 1          Enable repeat-one
+  7 and 8         Keep the current song selected
+  20             Selects the first song regardless of current position
+
+Test 5: Delete current, head, tail, and duplicate titles
+--------------------------------------------------------
+Create three songs: "Same", "Other", "Same". Play position 2, then delete
+position 2. The current song moves to the successor ("Same"). Delete by exact
+title "same"; only the first matching song is removed and the other "Same"
+remains. Delete by title "same" again; the final match is removed.
+Play, next, previous, and display on the empty playlist remain safe.
+
+Test 6: Sort, reverse, and shuffle
+----------------------------------
+Add titles "Zebra", "apple", "Moon".
+  Sort     Expected order: apple, Moon, Zebra (case-insensitive)
+  Reverse  Expected order: Zebra, Moon, apple
+  Shuffle  Playlist contains the same three songs exactly once; links remain
+           traversable both forward and backward.
+
+Test 7: Single node, clear, and create playlist
+-----------------------------------------------
+Add one song; shuffle and sort report that at least two songs are needed.
+Delete the only song by position; count becomes zero and the current song is
+cleared.
+Add a song, clear the playlist, and verify count is zero. Create a new named
+playlist and verify it is empty and the new name appears in the menu.
+
+Test 8: Invalid positions
+-------------------------
+On an empty list, attempt to insert at position 0 or 2; on a non-empty list,
+attempt to play/delete a position outside 1..song-count. The program rejects
+each input and prompts again without corrupting the list.
