@@ -1,4 +1,6 @@
 #include <cctype>
+#include <cerrno>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <random>
@@ -7,6 +9,9 @@
 #include <cstdio>
 
 #ifdef PLAYLIST_WEB_SERVER
+#ifndef PLAYLIST_WEB_SERVER_PORT
+#define PLAYLIST_WEB_SERVER_PORT 8080
+#endif
 #include "third_party/httplib.h"
 #include <fstream>
 #include <mutex>
@@ -18,23 +23,43 @@
 #endif
 #endif
 
+enum class SongSource {
+    Local,
+    Spotify
+};
+
 struct SongNode {
     int id;
     std::string title;
     std::string artist;
     int durationSeconds;
+    SongSource source;
     std::string audioFilePath;
+    std::string spotifyId;
+    std::string spotifyUri;
+    std::string album;
+    std::string artworkUrl;
     SongNode* next;
     SongNode* previous;
 
     SongNode(int songId, const std::string& songTitle,
              const std::string& songArtist, int duration,
-             const std::string& audioPath = std::string())
+             const std::string& audioPath = std::string(),
+             SongSource songSource = SongSource::Local,
+             const std::string& trackSpotifyId = std::string(),
+             const std::string& trackSpotifyUri = std::string(),
+             const std::string& trackAlbum = std::string(),
+             const std::string& trackArtworkUrl = std::string())
         : id(songId),
           title(songTitle),
           artist(songArtist),
           durationSeconds(duration),
+          source(songSource),
           audioFilePath(audioPath),
+          spotifyId(trackSpotifyId),
+          spotifyUri(trackSpotifyUri),
+          album(trackAlbum),
+          artworkUrl(trackArtworkUrl),
           next(nullptr),
           previous(nullptr) {}
 };
@@ -126,6 +151,21 @@ public:
                 int durationSeconds,
                 const std::string& audioPath = std::string()) {
         SongNode* song = createSong(title, artist, durationSeconds, audioPath);
+        return appendSong(song);
+    }
+
+    int addSpotifySong(const std::string& title, const std::string& artist,
+                       int durationSeconds, const std::string& spotifyId,
+                       const std::string& spotifyUri, const std::string& album,
+                       const std::string& artworkUrl) {
+        SongNode* song = new SongNode(
+            nextSongId_++, title, artist, durationSeconds, std::string(),
+            SongSource::Spotify, spotifyId, spotifyUri, album, artworkUrl);
+        return appendSong(song);
+    }
+
+private:
+    int appendSong(SongNode* song) {
         song->previous = tail_;
 
         if (tail_ != nullptr) {
@@ -142,6 +182,7 @@ public:
         return song->id;
     }
 
+public:
     bool insertSongAt(int position, const std::string& title,
                       const std::string& artist, int durationSeconds) {
         if (position < 1 || position > songCount_ + 1) {
@@ -405,9 +446,7 @@ public:
         SongNode* song = head_;
         while (song != nullptr) {
             SongNode* nextSong = song->next;
-            if (!song->audioFilePath.empty()) {
-                std::remove(song->audioFilePath.c_str());
-            }
+            removeAudioFile(song->audioFilePath);
             delete song;
             song = nextSong;
         }
@@ -425,6 +464,14 @@ private:
     int songCount_;
     int nextSongId_;
     RepeatMode repeatMode_;
+
+    static void removeAudioFile(const std::string& path) {
+        if (!path.empty() && std::remove(path.c_str()) != 0 &&
+            errno != ENOENT) {
+            std::cerr << "Could not remove uploaded audio file '" << path
+                      << "': " << std::strerror(errno) << "\n";
+        }
+    }
 
     SongNode* createSong(const std::string& title, const std::string& artist,
                          int durationSeconds,
@@ -475,9 +522,7 @@ private:
             current_ = song->next != nullptr ? song->next : song->previous;
         }
 
-        if (!song->audioFilePath.empty()) {
-            std::remove(song->audioFilePath.c_str());
-        }
+        removeAudioFile(song->audioFilePath);
         delete song;
         --songCount_;
         if (songCount_ == 0) {
@@ -913,8 +958,29 @@ int main() {
         json << "{\"id\":" << song->id << ",\"title\":\""
              << jsonEscape(song->title) << "\",\"artist\":\""
              << jsonEscape(song->artist) << "\",\"duration\":"
-             << song->durationSeconds << ",\"audioUrl\":\"/"
-             << jsonEscape(song->audioFilePath) << "\"}";
+             << song->durationSeconds << ",\"source\":\""
+             << (song->source == SongSource::Spotify ? "spotify" : "local")
+             << "\",\"spotifyId\":";
+        if (song->source == SongSource::Spotify) {
+            json << "\"" << jsonEscape(song->spotifyId) << "\"";
+        } else {
+            json << "null";
+        }
+        json << ",\"spotifyUri\":";
+        if (song->source == SongSource::Spotify) {
+            json << "\"" << jsonEscape(song->spotifyUri) << "\"";
+        } else {
+            json << "null";
+        }
+        json << ",\"album\":\"" << jsonEscape(song->album)
+             << "\",\"artworkUrl\":\"" << jsonEscape(song->artworkUrl)
+             << "\",\"audioUrl\":";
+        if (song->source == SongSource::Local) {
+            json << "\"/" << jsonEscape(song->audioFilePath) << "\"";
+        } else {
+            json << "null";
+        }
+        json << "}";
         return json.str();
     };
 
@@ -929,10 +995,11 @@ int main() {
         }
     };
 
-    const auto playlistJson = [&playlist, &songJson, &repeatModeName]() {
+    const auto playlistJson =
+        [&playlist, &songJson, &repeatModeName, &jsonEscape]() {
         std::ostringstream json;
         const SongNode* current = playlist.currentSong();
-        json << "{\"name\":\"" << "Your Library"
+        json << "{\"name\":\"" << jsonEscape(playlist.name())
              << "\",\"count\":" << playlist.songCount()
              << ",\"currentId\":";
         if (current == nullptr) {
@@ -1075,6 +1142,42 @@ int main() {
         return true;
     };
 
+    const auto validSpotifyClientId = [](const std::string& value) {
+        if (value.empty() || value.size() > 128) {
+            return false;
+        }
+        for (std::string::size_type i = 0; i < value.size(); ++i) {
+            const unsigned char character =
+                static_cast<unsigned char>(value[i]);
+            if (!std::isalnum(character) && character != '-' &&
+                character != '_') {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    std::string spotifyClientId;
+    std::ifstream savedConfig("spotify_config.txt", std::ios::binary);
+    std::string savedClientId;
+    if (savedConfig && std::getline(savedConfig, savedClientId) &&
+        validSpotifyClientId(savedClientId)) {
+        spotifyClientId = savedClientId;
+    }
+    if (spotifyClientId.empty()) {
+        const char* configuredClientId = std::getenv("SPOTIFY_CLIENT_ID");
+        if (configuredClientId != nullptr &&
+            validSpotifyClientId(configuredClientId)) {
+            spotifyClientId = configuredClientId;
+        }
+    }
+    std::mutex spotifyConfigMutex;
+    const char* configuredRedirectUri = std::getenv("SPOTIFY_REDIRECT_URI");
+    const std::string spotifyRedirectUri =
+        configuredRedirectUri == nullptr || configuredRedirectUri[0] == '\0'
+            ? "http://127.0.0.1:8080/"
+            : configuredRedirectUri;
+
     server.Get("/", [&readAsset](const httplib::Request&,
                                  httplib::Response& response) {
         std::string content;
@@ -1084,6 +1187,7 @@ int main() {
             return;
         }
         response.set_content(content, "text/html; charset=utf-8");
+        response.set_header("Cache-Control", "no-store");
     });
 
     server.Get("/style.css", [&readAsset](const httplib::Request&,
@@ -1095,6 +1199,7 @@ int main() {
             return;
         }
         response.set_content(content, "text/css; charset=utf-8");
+        response.set_header("Cache-Control", "no-store");
     });
 
     server.Get("/script.js", [&readAsset](const httplib::Request&,
@@ -1106,20 +1211,43 @@ int main() {
             return;
         }
         response.set_content(content, "application/javascript; charset=utf-8");
+        response.set_header("Cache-Control", "no-store");
+    });
+
+    server.Get("/spotify.js", [&readAsset](const httplib::Request&,
+                                          httplib::Response& response) {
+        std::string content;
+        if (!readAsset("spotify.js", content)) {
+            response.status = 500;
+            response.set_content("Could not read spotify.js.", "text/plain");
+            return;
+        }
+        response.set_content(content, "application/javascript; charset=utf-8");
+        response.set_header("Cache-Control", "no-store");
     });
 
     server.Get(R"(/uploads/([A-Za-z0-9_.-]+))",
-               [&readAsset](const httplib::Request& request,
-                           httplib::Response& response) {
+               [](const httplib::Request& request,
+                  httplib::Response& response) {
                    const std::string filename = request.matches[1].str();
                    if (filename.find("song_") != 0) {
                        response.status = 404;
                        return;
                    }
-                   std::string content;
-                   if (!readAsset("uploads/" + filename, content)) {
+                   const std::string path = "uploads/" + filename;
+                   std::ifstream file(path.c_str(),
+                                      std::ios::binary | std::ios::ate);
+                   if (!file) {
                        response.status = 404;
                        response.set_content("Audio file not found.",
+                                            "text/plain");
+                       return;
+                   }
+                   const std::streamoff fileSize = file.tellg();
+                   file.close();
+                   if (fileSize <= 0) {
+                       response.status = 404;
+                       response.set_content("Audio file is empty or unreadable.",
                                             "text/plain");
                        return;
                    }
@@ -1135,7 +1263,31 @@ int main() {
                    if (extension == ".aac") mime = "audio/aac";
                    if (extension == ".flac") mime = "audio/flac";
                    if (extension == ".webm") mime = "audio/webm";
-                   response.set_content(content, mime);
+                   response.set_header("Accept-Ranges", "bytes");
+                   response.set_content_provider(
+                       static_cast<std::size_t>(fileSize), mime,
+                       [path](std::size_t offset, std::size_t length,
+                              httplib::DataSink& sink) {
+                           if (length == 0) {
+                               return true;
+                           }
+                           std::ifstream audioFile(path.c_str(),
+                                                   std::ios::binary);
+                           if (!audioFile) {
+                               return false;
+                           }
+                           audioFile.seekg(
+                               static_cast<std::streamoff>(offset));
+                           std::string chunk(length, '\0');
+                           audioFile.read(
+                               &chunk[0],
+                               static_cast<std::streamsize>(length));
+                           if (static_cast<std::size_t>(audioFile.gcount()) !=
+                               length) {
+                               return false;
+                           }
+                           return sink.write(chunk.data(), chunk.size());
+                       });
                });
 
     server.Get("/api/playlist",
@@ -1147,7 +1299,7 @@ int main() {
                });
 
     server.Get("/api/current",
-               [&playlist, &playlistMutex, &songJson](
+               [&playlist, &playlistMutex, &songJson, &sendJson](
                    const httplib::Request&, httplib::Response& response) {
                    std::lock_guard<std::mutex> lock(playlistMutex);
                    sendJson(response, 200,
@@ -1155,24 +1307,91 @@ int main() {
                                 songJson(playlist.currentSong()) + "}");
                });
 
+    server.Get("/api/spotify/config",
+               [&spotifyClientId, &spotifyConfigMutex, &spotifyRedirectUri,
+                &jsonEscape, &sendJson](
+                   const httplib::Request&, httplib::Response& response) {
+                   std::string clientId;
+                   {
+                       std::lock_guard<std::mutex> lock(spotifyConfigMutex);
+                       clientId = spotifyClientId;
+                   }
+                   const bool clientIdDetected = !clientId.empty();
+                   std::ostringstream json;
+                   json << "{\"configured\":"
+                        << (clientIdDetected ? "true" : "false")
+                        << ",\"clientIdDetected\":"
+                        << (clientIdDetected ? "true" : "false")
+                        << ",\"clientId\":\""
+                        << jsonEscape(clientId)
+                        << "\",\"redirectUri\":\""
+                        << jsonEscape(spotifyRedirectUri) << "\"}";
+                   sendJson(response, 200, json.str());
+                   response.set_header("Cache-Control", "no-store");
+               });
+
+    server.Post("/api/spotify/config",
+                [&spotifyClientId, &spotifyConfigMutex, &spotifyRedirectUri,
+                 &validSpotifyClientId, &readJsonString, &jsonEscape,
+                 &sendJson, &sendError](
+                    const httplib::Request& request,
+                    httplib::Response& response) {
+                    std::string clientId;
+                    if (!readJsonString(request.body, "clientId", clientId) ||
+                        !validSpotifyClientId(clientId)) {
+                        sendError(response, 400,
+                                  "Client ID must contain 1-128 letters, digits, hyphens, or underscores.");
+                        return;
+                    }
+
+                    std::lock_guard<std::mutex> lock(spotifyConfigMutex);
+                    std::ofstream savedConfig("spotify_config.txt",
+                                              std::ios::binary | std::ios::trunc);
+                    if (!savedConfig) {
+                        sendError(response, 500,
+                                  "Could not open spotify_config.txt for writing. Run Sonora from a writable project folder.");
+                        return;
+                    }
+                    savedConfig << clientId << '\n';
+                    savedConfig.flush();
+                    if (!savedConfig) {
+                        sendError(response, 500,
+                                  "Could not save Spotify configuration to spotify_config.txt.");
+                        return;
+                    }
+                    savedConfig.close();
+
+                    spotifyClientId = clientId;
+                    std::ostringstream json;
+                    json << "{\"configured\":true"
+                         << ",\"clientIdDetected\":true"
+                         << ",\"clientId\":\"" << jsonEscape(clientId)
+                         << "\",\"redirectUri\":\""
+                         << jsonEscape(spotifyRedirectUri) << "\""
+                         << ",\"message\":\"Spotify Client ID saved locally.\"}";
+                    sendJson(response, 200, json.str());
+                    response.set_header("Cache-Control", "no-store");
+                });
+
     server.Post("/api/songs",
                 [&playlist, &playlistMutex, &sendJson, &sendError, &songJson,
                  &validText, &extensionOf](
                     const httplib::Request& request,
                     httplib::Response& response) {
-                    if (!request.has_param("title") ||
-                        !request.has_param("artist") ||
-                        !request.has_param("duration") ||
+                    if (!request.has_file("title") ||
+                        !request.has_file("artist") ||
+                        !request.has_file("duration") ||
                         !request.has_file("audio")) {
                         sendError(response, 400,
                                   "Provide title, artist, duration, and an audio file.");
                         return;
                     }
-                    const std::string title = request.get_param_value("title");
+                    const std::string title =
+                        request.get_file_value("title").content;
                     const std::string artist =
-                        request.get_param_value("artist");
+                        request.get_file_value("artist").content;
                     const std::string durationText =
-                        request.get_param_value("duration");
+                        request.get_file_value("duration").content;
                     if (!validText(title, 160) || !validText(artist, 120)) {
                         sendError(response, 400,
                                   "Title and artist must be non-empty and within their length limits.");
@@ -1236,6 +1455,88 @@ int main() {
                     playlist.addSong(title, artist,
                                      static_cast<int>(duration),
                                      filename.str());
+                    sendJson(response, 201,
+                             std::string("{\"song\":") +
+                                 songJson(playlist.findById(songId)) + "}");
+                });
+
+    server.Post("/api/songs/spotify",
+                [&playlist, &playlistMutex, &sendJson, &sendError, &songJson,
+                 &validText](
+                    const httplib::Request& request,
+                    httplib::Response& response) {
+                    const char* requiredFields[] = {
+                        "title", "artist", "duration",
+                        "spotifyId", "spotifyUri", "album", "artworkUrl"};
+                    for (std::size_t i = 0;
+                         i < sizeof(requiredFields) / sizeof(requiredFields[0]);
+                         ++i) {
+                        if (!request.has_file(requiredFields[i])) {
+                            sendError(response, 400,
+                                      "Spotify track metadata is incomplete.");
+                            return;
+                        }
+                    }
+
+                    const std::string title =
+                        request.get_file_value("title").content;
+                    const std::string artist =
+                        request.get_file_value("artist").content;
+                    const std::string durationText =
+                        request.get_file_value("duration").content;
+                    const std::string spotifyId =
+                        request.get_file_value("spotifyId").content;
+                    const std::string spotifyUri =
+                        request.get_file_value("spotifyUri").content;
+                    const std::string album =
+                        request.get_file_value("album").content;
+                    const std::string artworkUrl =
+                        request.get_file_value("artworkUrl").content;
+
+                    if (!validText(title, 160) || !validText(artist, 240) ||
+                        !validText(album, 240) || spotifyId.empty() ||
+                        spotifyId.size() > 128 ||
+                        spotifyUri != "spotify:track:" + spotifyId ||
+                        artworkUrl.size() > 2048 ||
+                        (artworkUrl.size() > 0 &&
+                         artworkUrl.find("https://i.scdn.co/") != 0)) {
+                        sendError(response, 400,
+                                  "Spotify track metadata is invalid.");
+                        return;
+                    }
+                    for (std::string::size_type i = 0; i < spotifyId.size();
+                         ++i) {
+                        const unsigned char character =
+                            static_cast<unsigned char>(spotifyId[i]);
+                        if (!std::isalnum(character)) {
+                            sendError(response, 400,
+                                      "Spotify track ID is invalid.");
+                            return;
+                        }
+                    }
+                    char* end = nullptr;
+                    const long duration =
+                        std::strtol(durationText.c_str(), &end, 10);
+                    if (durationText.empty() || end == durationText.c_str() ||
+                        *end != '\0' || duration < 1 || duration > 86400) {
+                        sendError(response, 400,
+                                  "Duration must be a whole number from 1 to 86400 seconds.");
+                        return;
+                    }
+
+                    std::lock_guard<std::mutex> lock(playlistMutex);
+                    for (const SongNode* song = playlist.head(); song != nullptr;
+                         song = song->next) {
+                        if (song->source == SongSource::Spotify &&
+                            song->spotifyId == spotifyId) {
+                            sendError(response, 409,
+                                      "This Spotify track is already in your Sonora playlist.");
+                            return;
+                        }
+                    }
+                    const int songId = playlist.addSpotifySong(
+                        title, artist, static_cast<int>(duration), spotifyId,
+                        spotifyUri, album, artworkUrl);
                     sendJson(response, 201,
                              std::string("{\"song\":") +
                                  songJson(playlist.findById(songId)) + "}");
@@ -1376,19 +1677,34 @@ int main() {
     server.set_error_handler(
         [&sendError](const httplib::Request& request,
                     httplib::Response& response) {
-            if (request.path.find("/api/") == 0) {
-                sendError(response, response.status == 0 ? 404 : response.status,
-                          "API route not found.");
+            if (request.path.find("/api/") == 0 && response.status == 404) {
+                sendError(response, 404, "API route not found.");
+            } else if (request.path.find("/api/") == 0 &&
+                       response.body.empty()) {
+                sendError(response, response.status == 0 ? 400 : response.status,
+                          "The API request could not be processed.");
             } else {
-                response.set_content("Page not found.", "text/plain");
+                if (response.body.empty()) {
+                    response.set_content("Page not found.", "text/plain");
+                }
             }
         });
 
-    std::cout << "Music player ready at http://localhost:8080\n"
-              << "Keep this window open while using the player.\n";
-    if (!server.listen("127.0.0.1", 8080)) {
-        std::cerr << "Could not start server on 127.0.0.1:8080. "
-                  << "Check whether the port is already in use.\n";
+    std::cout << "Spotify Client ID detected: "
+              << (spotifyClientId.empty() ? "no" : "yes") << "\n"
+              << "Spotify redirect URI: " << spotifyRedirectUri << "\n"
+              << "Music player ready at http://127.0.0.1:"
+              << PLAYLIST_WEB_SERVER_PORT << "\n"
+              << "Bound to 127.0.0.1:" << PLAYLIST_WEB_SERVER_PORT
+              << ". Keep this window open while "
+                 "using the player.\n"
+              << std::flush;
+    if (!server.listen("127.0.0.1", PLAYLIST_WEB_SERVER_PORT)) {
+        std::cerr << "Could not start server on 127.0.0.1:"
+                  << PLAYLIST_WEB_SERVER_PORT << ". "
+                  << "Check whether the port is already in use and verify "
+                     "that Windows permits local connections.\n"
+                  << std::flush;
         return 1;
     }
     return 0;

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101012">
+  <title>Sonora — Music Player</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Sonora home">
+        <span class="brand-mark" aria-hidden="true">s</span>
+        <span>sonora</span>
+      </a>
+
+      <nav class="primary-nav" aria-label="Main navigation">
+        <a class="nav-link" href="#home">
+          <span class="nav-icon" aria-hidden="true">⌂</span> Home
+        </a>
+        <a class="nav-link" href="#library">
+          <span class="nav-icon" aria-hidden="true">▤</span> Your library
+        </a>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-heading">
+        <span>YOUR PLAYLISTS</span>
+        <button id="sidebar-add" class="icon-button" type="button" aria-label="Add a song">+</button>
+      </div>
+      <button class="playlist-nav active" type="button">
+        <span class="mini-cover" aria-hidden="true">♫</span>
+        <span id="sidebar-playlist-name">Your Library</span>
+      </button>
+      <div class="sidebar-note">
+        <span class="note-orb" aria-hidden="true">♪</span>
+        <p>Your next favorite<br>is one upload away.</p>
+        <button id="sidebar-upload" class="text-button" type="button">Add music <span aria-hidden="true">↗</span></button>
+      </div>
+
+      <div class="sidebar-bottom">
+        <span class="connection-dot"></span>
+        <span>LOCAL LIBRARY</span>
+      </div>
+    </aside>
+
+    <main id="home" class="main-content">
+      <header class="topbar">
+        <div class="history-buttons" aria-label="Navigation">
+          <button class="round-button subdued" type="button" aria-label="Back" disabled>‹</button>
+          <button class="round-button subdued" type="button" aria-label="Forward" disabled>›</button>
+        </div>
+        <label class="search-box">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input id="search-input" type="search" placeholder="Search songs or artists" autocomplete="off">
+          <kbd>Ctrl K</kbd>
+        </label>
+        <button id="spotify-login" class="spotify-login" type="button" disabled>
+          <span class="spotify-mark" aria-hidden="true">●</span>
+          <span id="spotify-login-label">Connect Spotify</span>
+        </button>
+        <button id="spotify-configure" class="spotify-configure" type="button" hidden>Change Client ID</button>
+        <button id="spotify-logout" class="spotify-logout" type="button" hidden>Disconnect</button>
+        <div class="profile-chip">
+          <span class="profile-avatar">S</span>
+          <span id="profile-label">Listener</span>
+        </div>
+      </header>
+
+      <section id="library" class="playlist-hero">
+        <div class="hero-cover" aria-hidden="true">
+          <div class="cover-glow"></div>
+          <div class="cover-line line-one"></div>
+          <div class="cover-line line-two"></div>
+          <div class="cover-line line-three"></div>
+          <span>♫</span>
+        </div>
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="eyebrow-dot"></span> YOUR PERSONAL SPACE</span>
+          <h1 id="playlist-title">Your Library</h1>
+          <p class="hero-description">A soundtrack that’s entirely yours.</p>
+          <p id="playlist-meta" class="playlist-meta">0 tracks · Add your first song to get started</p>
+          <div class="hero-actions">
+            <button id="play-all" class="button button-primary" type="button">
+              <span aria-hidden="true">▶</span> Play
+            </button>
+            <button id="add-song" class="button button-secondary" type="button">
+              <span aria-hidden="true">＋</span> Add music
+            </button>
+            <button id="more-actions" class="round-button action-menu" type="button" aria-label="More playlist actions">···</button>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <span class="stat-value" id="track-count">00</span>
+          <span class="stat-label">TRACKS</span>
+        </div>
+      </section>
+
+      <section class="spotify-section" aria-labelledby="spotify-heading">
+        <div class="spotify-section-heading">
+          <div>
+            <span class="eyebrow"><span class="spotify-dot"></span> SPOTIFY CATALOG</span>
+            <h2 id="spotify-heading">Find it on Spotify</h2>
+            <p id="spotify-status" class="spotify-status">Connect your Spotify account to search and play.</p>
+          </div>
+          <a class="spotify-external" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer">Open Spotify ↗</a>
+        </div>
+        <form id="spotify-search-form" class="spotify-search-form">
+          <label class="spotify-search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="spotify-search-input" type="search" placeholder="Search tracks, artists, or albums" maxlength="120" autocomplete="off">
+          </label>
+          <button id="spotify-search-submit" class="button button-primary" type="submit" disabled>Search</button>
+        </form>
+        <div class="spotify-tabs" role="tablist" aria-label="Spotify search type">
+          <button class="spotify-tab active" type="button" role="tab" aria-selected="true" data-spotify-type="track">Tracks</button>
+          <button class="spotify-tab" type="button" role="tab" aria-selected="false" data-spotify-type="artist">Artists</button>
+          <button class="spotify-tab" type="button" role="tab" aria-selected="false" data-spotify-type="album">Albums</button>
+        </div>
+        <div id="spotify-results" class="spotify-results" aria-live="polite">
+          <div class="spotify-empty-state">Sign in to search Spotify’s catalog.</div>
+        </div>
+        <p class="spotify-policy-note">Spotify playback requires Premium. Spotify audio stays in Spotify and is never downloaded or stored by Sonora.</p>
+      </section>
+
+      <section class="track-section" aria-label="Playlist songs">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">THE COLLECTION</span>
+            <h2>All tracks <span id="heading-count">0</span></h2>
+          </div>
+          <div class="list-actions">
+            <button id="sort-button" class="subtle-button" type="button" title="Sort alphabetically">A–Z <span aria-hidden="true">↕</span></button>
+            <button id="reverse-button" class="subtle-button" type="button" title="Reverse playlist order">Reverse <span aria-hidden="true">⇅</span></button>
+            <button id="clear-button" class="subtle-button danger-text" type="button" title="Clear playlist">Clear</button>
+          </div>
+        </div>
+        <div class="track-table-wrap">
+          <table class="track-table">
+            <thead>
+              <tr>
+                <th class="index-column">#</th>
+                <th>Title</th>
+                <th class="album-column">Album</th>
+                <th class="duration-column" aria-label="Duration">◷</th>
+                <th class="delete-column" aria-label="Actions"></th>
+              </tr>
+            </thead>
+            <tbody id="track-list"></tbody>
+          </table>
+          <div id="empty-state" class="empty-state">
+            <div class="empty-art" aria-hidden="true"><span>♫</span></div>
+            <h3>Your library is a blank canvas</h3>
+            <p>Add an audio file and start building your collection.</p>
+            <button class="button button-primary" type="button" data-open-upload>Add your first song</button>
+          </div>
+          <div id="no-results" class="no-results" hidden>No tracks match your search.</div>
+        </div>
+      </section>
+      <footer class="content-footer">Made for the moments between the noise.</footer>
+    </main>
+  </div>
+
+  <section class="player-bar" aria-label="Audio player">
+    <div class="now-playing">
+      <div id="player-art" class="player-art" aria-hidden="true"><span>♫</span></div>
+      <div class="now-playing-copy">
+        <strong id="player-title">Nothing playing</strong>
+        <span id="player-artist">Choose a track to begin</span>
+      </div>
+      <button id="player-delete" class="icon-button player-delete" type="button" aria-label="Remove current song" title="Remove current song" disabled>×</button>
+    </div>
+
+    <div class="player-center">
+      <div class="transport-controls">
+        <button id="shuffle-button" class="player-control" type="button" aria-label="Shuffle" title="Shuffle">⤨</button>
+        <button id="previous-button" class="player-control" type="button" aria-label="Previous song" title="Previous">|‹</button>
+        <button id="toggle-play" class="play-toggle" type="button" aria-label="Play" title="Play">▶</button>
+        <button id="next-button" class="player-control" type="button" aria-label="Next song" title="Next">›|</button>
+        <button id="repeat-button" class="player-control" type="button" aria-label="Repeat off" title="Repeat off">↻</button>
+      </div>
+      <div class="timeline">
+        <span id="elapsed-time">0:00</span>
+        <input id="progress-slider" class="range-slider progress-slider" type="range" min="0" max="1000" value="0" aria-label="Track progress">
+        <span id="total-time">0:00</span>
+      </div>
+    </div>
+
+    <div class="player-extras">
+      <span class="volume-icon" aria-hidden="true">◖</span>
+      <input id="volume-slider" class="range-slider volume-slider" type="range" min="0" max="100" value="75" aria-label="Volume">
+    </div>
+    <audio id="audio-engine" preload="metadata"></audio>
+  </section>
+
+  <div id="upload-dialog" class="dialog-backdrop" hidden>
+    <section class="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <button id="close-dialog" class="dialog-close" type="button" aria-label="Close">×</button>
+      <span class="eyebrow"><span class="eyebrow-dot"></span> ADD TO YOUR LIBRARY</span>
+      <h2 id="dialog-title">Bring the music in.</h2>
+      <p class="dialog-intro">Add a track and it’ll be ready whenever you are.</p>
+      <form id="upload-form">
+        <label class="field-label">Song title
+          <input name="title" type="text" maxlength="160" placeholder="e.g. Midnight City" required>
+        </label>
+        <label class="field-label">Artist
+          <input name="artist" type="text" maxlength="120" placeholder="e.g. M83" required>
+        </label>
+        <div class="form-row">
+          <label class="field-label">Duration <span class="field-hint">(seconds)</span>
+            <input name="duration" type="number" min="1" max="86400" placeholder="240" required>
+          </label>
+          <label class="field-label">Audio file
+            <span class="file-picker">
+              <input name="audio" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" required>
+              <span class="file-picker-label"><span aria-hidden="true">↥</span><span id="file-name">Choose audio</span></span>
+            </span>
+          </label>
+        </div>
+        <p class="upload-hint">MP3, WAV, OGG, M4A, AAC, FLAC or WebM · Up to 30 MB</p>
+        <div id="upload-error" class="form-error" role="alert" hidden></div>
+        <button id="submit-upload" class="button button-primary submit-button" type="submit">
+          <span>Add to library</span><span aria-hidden="true">↗</span>
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <div id="spotify-config-dialog" class="dialog-backdrop" hidden>
+    <section class="upload-dialog config-dialog" role="dialog" aria-modal="true" aria-labelledby="spotify-config-title">
+      <button id="close-spotify-config" class="dialog-close" type="button" aria-label="Close">×</button>
+      <span class="eyebrow"><span class="spotify-dot"></span> SPOTIFY SETUP</span>
+      <h2 id="spotify-config-title">Connect your Spotify app.</h2>
+      <p class="dialog-intro">Enter the Client ID from your Spotify Developer Dashboard. Sonora stores it locally; never enter a client secret.</p>
+      <form id="spotify-config-form">
+        <label class="field-label">Spotify Client ID
+          <input id="spotify-client-id" name="clientId" type="text" maxlength="128" pattern="[A-Za-z0-9_\x2d]{1,128}" autocomplete="off" spellcheck="false" placeholder="Your public Client ID" required>
+        </label>
+        <p class="config-redirect-note">Redirect URI: <code>http://127.0.0.1:8080/</code></p>
+        <div id="spotify-config-error" class="form-error" role="alert" hidden></div>
+        <button id="save-spotify-config" class="button button-primary submit-button" type="submit">
+          <span>Save Client ID</span><span aria-hidden="true">↗</span>
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/spotify.js"></script>
+  <script src="https://sdk.scdn.co/spotify-player.js" async></script>
+  <script src="/script.js"></script>
+</body>
+</html>
